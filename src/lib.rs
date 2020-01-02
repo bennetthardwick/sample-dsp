@@ -319,6 +319,8 @@ mod tests {
         assert_eq!(0.0.into_sample::<u8>().into_sample::<u16>(), 32768);
 
         assert_eq!(0.5.into_sample::<u8>(), 191);
+        assert_eq!(0.2.into_sample::<u32>().into_sample::<f32>(), 0.2);
+        assert_eq!(0.65.into_sample::<u32>().into_sample::<f32>(), 0.65);
 
         assert_eq!(1.0.into_sample::<u8>(), 255);
         assert_eq!(1.5.into_sample::<u8>(), 255);
