@@ -68,10 +68,10 @@ macro_rules! impl_from_sample_float_unsigned {
         $(impl FromSample<$sample> for $type {
             #[inline]
             fn from_sample(value: $sample) -> Self {
-                if value < core::$sample::MAX / 2 {
-                    -((core::$sample::MAX / 2 - value) as $type) / (core::$sample::MAX / 2) as $type
+                if value < $sample::mid() {
+                    -(($sample::mid() - value) as $type) / $sample::amp() as $type
                 } else {
-                    ((value - core::$sample::MAX / 2) as $type) / (core::$sample::MAX / 2) as $type
+                    ((value - $sample::mid()) as $type) / $sample::amp() as $type
                 }
             }
         })*
@@ -94,7 +94,7 @@ macro_rules! impl_from_sample_float_signed {
         $(impl FromSample<$sample> for $type {
             #[inline]
             fn from_sample(value: $sample) -> Self {
-                value as $type / core::$sample::MAX as $type
+                value as $type / $sample::mid() as $type
             }
         })*
     }
@@ -106,9 +106,9 @@ macro_rules! impl_from_sample_unsigned_float {
             #[inline]
             fn from_sample(value: $sample) -> Self {
                 if value <= 0.0 {
-                    ($type::mid()) - ((-value).min(1.0) * ($type::mid()) as $sample) as $type
+                    $type::mid() - ((-value).min(1.0) * ($type::amp()) as $sample) as $type
                 } else {
-                    ($type::mid()) + (value.min(1.0) * ($type::amp()) as $sample) as $type
+                    $type::mid() + (value.min(1.0) * ($type::amp()) as $sample) as $type
                 }
             }
         })*
@@ -123,8 +123,50 @@ macro_rules! impl_from_sample_unsigned_signed {
                 if value < 0 {
                     ((-value) as $type $operator $amount)
                 } else {
-                    (value) as $type $operator $amount + core::$type::MAX / 2
+                    (value) as $type $operator $amount + $type::mid()
                 }
+            }
+        })*
+    }
+}
+
+// Signed is bigger
+macro_rules! impl_from_sample_signed_unsigned_bigger {
+    ($type:ident, $operator:tt, $amount:tt, $sample:ident) => {
+        impl FromSample<$sample> for $type {
+            #[inline]
+            fn from_sample(value: $sample) -> Self {
+                if value < $sample::mid() {
+                    -(($sample::mid() - value) as $type $operator $amount)
+                } else {
+                    (($sample::mid() - value) as $type $operator $amount)
+                }
+            }
+        }
+    }
+}
+
+macro_rules! impl_from_sample_signed_unsigned_smaller {
+    ($type:ident, $operator:tt, $amount:tt, $sample:ident) => {
+        impl FromSample<$sample> for $type {
+            #[inline]
+            fn from_sample(value: $sample) -> Self {
+                if value < $sample::mid() {
+                    -((($sample::mid() - value) $operator $amount) as $type)
+                } else {
+                    (($sample::mid() - value) $operator $amount) as $type
+                }
+            }
+        }
+    }
+}
+
+macro_rules! impl_from_sample_signed_float {
+    ($type:ident, $($sample:ty),*) => {
+        $(impl FromSample<$sample> for $type {
+            #[inline]
+            fn from_sample(value: $sample) -> Self {
+                (if value < 0.0 { value.max(-1.0) } else { value.max(1.0) } * $type::peak() as $sample) as $type
             }
         })*
     }
@@ -146,12 +188,10 @@ macro_rules! impl_flip_sample_unsigned {
         $(impl FlipSample for $sample {
             #[inline]
             fn flip(self) -> Self {
-                if self == core::$sample::MAX / 2 {
-                    self
-                } else if self < (core::$sample::MAX / 2) {
-                    self + core::$sample::MAX / 2
+                if self < $sample::mid() {
+                    ($sample::mid() - self) + $sample::mid()
                 } else {
-                    self - core::$sample::MAX / 2
+                    $sample::mid() - (self - $sample::mid())
                 }
             }
         })*
@@ -276,9 +316,27 @@ impl_from_sample_unsigned_unsigned!(u32, 2, u16);
 impl_from_sample_unsigned_unsigned!(u32, 4, u8);
 impl_from_sample_unsigned_unsigned!(u16, 2, u8);
 
+impl_from_sample_signed_float!(i8, f64, f32);
+impl_from_sample_signed_float!(i16, f64, f32);
+impl_from_sample_signed_float!(i32, f64, f32);
+
+impl_from_sample_signed_unsigned_bigger!(i32, *, 2, u8);
+impl_from_sample_signed_unsigned_bigger!(i32, *, 1, u16);
+impl_from_sample_signed_unsigned_bigger!(i32, /, 2, u32);
+
+impl_from_sample_signed_unsigned_bigger!(i16, *, 2, u8);
+impl_from_sample_signed_unsigned_bigger!(i16, *, 1, u16);
+
+impl_from_sample_signed_unsigned_bigger!(i8, /, 2, u8);
+
+impl_from_sample_signed_unsigned_smaller!(i8, /, 4, u16);
+impl_from_sample_signed_unsigned_smaller!(i8, /, 8, u32);
+impl_from_sample_signed_unsigned_smaller!(i16, /, 4, u32);
+
+
 impl_sample_float!(f32, f64);
 impl_sample_unsigned!(u32, u16, u8);
-// impl_sample_signed!(i32, i16, i8);
+impl_sample_signed!(i32, i16, i8);
 
 impl FromSample<f64> for f32 {
     #[inline]
@@ -300,7 +358,7 @@ impl FromSample<f32> for f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{IntoSample, Sample};
+    use super::{FlipSample, IntoSample, Sample};
     use sample::Sample as ExtSample;
 
     #[test]
@@ -319,11 +377,23 @@ mod tests {
         assert_eq!(0.0.into_sample::<u8>().into_sample::<u16>(), 32768);
 
         assert_eq!(0.5.into_sample::<u8>(), 191);
+        assert_eq!(0.0.into_sample::<u8>(), 128);
         assert_eq!(0.2.into_sample::<u32>().into_sample::<f32>(), 0.2);
         assert_eq!(0.65.into_sample::<u32>().into_sample::<f32>(), 0.65);
+        assert_eq!(-0.65.into_sample::<u32>().into_sample::<f32>(), -0.65);
+
+        assert_eq!(255u8.into_sample::<f32>(), 1.0);
 
         assert_eq!(1.0.into_sample::<u8>(), 255);
         assert_eq!(1.5.into_sample::<u8>(), 255);
-        assert_eq!((-1.0).into_sample::<u8>(), 0);
+        assert_eq!((-1.0).into_sample::<u8>(), 1);
+    }
+
+    #[test]
+    fn test_flip() {
+        assert_eq!(0.0.flip(), 0.0);
+        assert_eq!(1.0.flip(), -1.0);
+        assert_eq!(255u8.flip(), 1);
+        assert_eq!(1u8.flip(), 255);
     }
 }
