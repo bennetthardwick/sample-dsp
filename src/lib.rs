@@ -106,9 +106,9 @@ macro_rules! impl_from_sample_unsigned_float {
             #[inline]
             fn from_sample(value: $sample) -> Self {
                 if value <= 0.0 {
-                    (core::$type::MAX / 2 + 1) - ((-value).min(1.0) * (core::$type::MAX / 2 + 1) as $sample) as $type
+                    ($type::mid()) - ((-value).min(1.0) * ($type::mid()) as $sample) as $type
                 } else {
-                    (core::$type::MAX / 2 + 1) + (value.min(1.0) * (core::$type::MAX / 2 + 1) as $sample) as $type
+                    ($type::mid()) + (value.min(1.0) * ($type::amp()) as $sample) as $type
                 }
             }
         })*
@@ -184,6 +184,60 @@ macro_rules! impl_from_sample_unsigned_unsigned {
     };
 }
 
+macro_rules! impl_sample_float {
+    ($($sample:ty),*) => {
+        $(
+            impl Sample for $sample {
+                fn mid() -> Self {
+                    0.0
+                }
+                fn amp() -> Self {
+                    1.0
+                }
+                fn peak() -> Self {
+                    1.0
+                }
+            }
+        )*
+    }
+}
+
+macro_rules! impl_sample_unsigned {
+    ($($sample:ident),*) => {
+        $(
+            impl Sample for $sample {
+                fn mid() -> Self {
+                    Self::amp() + 1
+                }
+                fn amp() -> Self {
+                    core::$sample::MAX / 2
+                }
+                fn peak() -> Self {
+                    core::$sample::MAX
+                }
+            }
+        )*
+    }
+}
+
+macro_rules! impl_sample_signed {
+    ($($sample:ident),*) => {
+        $(
+            impl Sample for $sample {
+                fn mid() -> Self {
+                    0
+                }
+                fn amp() -> Self {
+                    core::$sample::MAX
+                }
+                fn peak() -> Self {
+                    core::$sample::MAX
+                }
+            }
+        )*
+    }
+}
+
 // A whole lot of code
 impl_into_sample!(u8, i8, u16, i16, u32, i32, f32, f64);
 
@@ -222,6 +276,10 @@ impl_from_sample_unsigned_unsigned!(u32, 2, u16);
 impl_from_sample_unsigned_unsigned!(u32, 4, u8);
 impl_from_sample_unsigned_unsigned!(u16, 2, u8);
 
+impl_sample_float!(f32, f64);
+impl_sample_unsigned!(u32, u16, u8);
+// impl_sample_signed!(i32, i16, i8);
+
 impl FromSample<f64> for f32 {
     #[inline]
     fn from_sample(value: f64) -> f32 {
@@ -240,76 +298,6 @@ impl FromSample<f32> for f64 {
     }
 }
 
-impl Sample for f32 {
-    fn mid() -> Self {
-        0.0
-    }
-
-    fn amp() -> Self {
-        1.0
-    }
-
-    fn peak() -> Self {
-        1.0
-    }
-}
-
-impl Sample for f64 {
-    fn mid() -> Self {
-        0.0
-    }
-
-    fn amp() -> Self {
-        1.0
-    }
-
-    fn peak() -> Self {
-        1.0
-    }
-}
-
-impl Sample for u8 {
-    fn mid() -> Self {
-        core::u8::MAX / 2 + 1
-    }
-
-    fn amp() -> Self {
-        core::u8::MAX / 2
-    }
-
-    fn peak() -> Self {
-        core::u8::MAX
-    }
-}
-
-impl Sample for u16 {
-    fn mid() -> Self {
-        core::u16::MAX / 2 + 1
-    }
-
-    fn amp() -> Self {
-        core::u16::MAX / 2
-    }
-
-    fn peak() -> Self {
-        core::u16::MAX
-    }
-}
-
-impl Sample for u32 {
-    fn mid() -> Self {
-        core::u32::MAX / 2 + 1
-    }
-
-    fn amp() -> Self {
-        core::u32::MAX / 2
-    }
-
-    fn peak() -> Self {
-        core::u32::MAX
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{IntoSample, Sample};
@@ -318,6 +306,10 @@ mod tests {
     #[test]
     fn test_equilibrium() {
         assert_eq!(u8::mid(), u8::equilibrium());
+        assert_eq!(u16::mid(), u16::equilibrium());
+        assert_eq!(u32::mid(), u32::equilibrium());
+        assert_eq!(f32::mid(), f32::equilibrium());
+        assert_eq!(f64::mid(), f64::equilibrium());
     }
 
     #[test]
